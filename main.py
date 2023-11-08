@@ -1,13 +1,14 @@
 import pygame
 import math
-import numpy as npArray
 
 pygame.init()
 
+# STÄDA UPP KLASSERNA. SIZE OCH X OCH Y POSITIONER BEHÖVER INTE VARA MED
 class tile4Matrix:
     def __init__(self):
         self.visible = True
         self.data = None
+        self.pairID = None
 
 class tileData:
     def __init__(self):
@@ -19,6 +20,7 @@ class tileData:
 class sideTileClass():
     def __init__(self):
         self.data = None
+        self.radius = None
 
 class boardClass():
     def __init__(self):
@@ -35,24 +37,27 @@ red = (255, 0, 0)
 green = (0, 255, 0)
 blue = (0, 0, 255)
 
+# status variables
+mouseStatus = None
+
 # adjustable parameters
 totalTiles = 22
 minRatio = 3/2
 boardScaleFactor = 0.9
 tileScaleFactor = 0.9
 radiusScaleFactor = 10
-outlineScaleFactor = 30
+outlineScaleFactor = 40
 sideBarScaleFactor = 1/3
 sideTileScaleFactor = 0.65
 fps = 60
 
 # screen, side bar and game variables
 displayInfo = pygame.display.Info()
-screenHeight = displayInfo.current_h
-screenWidth = displayInfo.current_w
-#screenScaleFactor = 80
-#screenHeight = 9*screenScaleFactor
-#screenWidth = 16*screenScaleFactor
+#screenHeight = displayInfo.current_h
+#screenWidth = displayInfo.current_w
+screenScaleFactor = 80
+screenHeight = 9*screenScaleFactor
+screenWidth = 16*screenScaleFactor
 screen = pygame.display.set_mode([screenWidth, screenHeight])
 
 sideBar = pygame.Rect([0, 0, screenWidth*sideBarScaleFactor, screenHeight])
@@ -88,7 +93,10 @@ def calculateSideTiles():
     posY2 = size + 2*(sideBar.height - 2*size)/3
 
     sideTileList[0].data = pygame.Rect([posX1, posY1, size, size])
-    sideTileList[1].data = pygame.Rect([posX2, posY2, size, size])   
+    sideTileList[1].data = pygame.Rect([posX2, posY2, size, size])
+
+    sideTileList[0].radius = round(sideTileList[0].data.width/radiusScaleFactor)
+    sideTileList[1].radius = round(sideTileList[1].data.width/radiusScaleFactor)  
 
     return(sideTileList)    
 
@@ -122,13 +130,12 @@ def calculateBoard():
 
 def drawElements():
     pygame.draw.rect(screen, black, sideBar)
-    pygame.draw.rect(screen, white, sideTileList[0].data, 0, 20)
-    pygame.draw.rect(screen, white, sideTileList[1].data, 0, 20)
+    pygame.draw.rect(screen, white, sideTileList[0].data, 0, sideTileList[0].radius)
+    pygame.draw.rect(screen, white, sideTileList[1].data, 0, sideTileList[1].radius)
     #boardObject = pygame.draw.rect(screen, black, [board.x, board.y, board.width, board.height])
 
 def drawTiles():
     for i in range(rows):
-
         if(i == (rows - 1)):
             for j in range(columns - board.excess):
                 if(tileMatrix[i][j].visible == True):
@@ -145,6 +152,7 @@ def drawTiles():
                     if(tileMatrix[i][j].data.collidepoint(pygame.mouse.get_pos())):
                         pygame.draw.rect(screen, green, tileMatrix[i][j].data, tile.outline, tile.radius)
 
+# IMPLEMENTERA SAMMA KOD SOM VID clickCollision
 def generateTileMatrix():
     tileMatrix = [[tile4Matrix() for i in range(columns)] for j in range(rows)]
     
@@ -164,6 +172,20 @@ def generateTileMatrix():
     
     return tileMatrix
 
+def clickCollision(pos):
+    counter = 0
+
+    for i in range(rows):
+        for j in range(columns):
+
+            if counter > totalTiles - 1:
+                break
+
+            elif(tileMatrix[i][j].data.collidepoint(pos)):
+                tileMatrix[i][j].visible = False
+
+            counter += 1
+
 # code that runs once
 rows, columns = calculateRowsColumns(totalTiles)
 sideTileList = calculateSideTiles()   
@@ -182,12 +204,17 @@ while run:
         if event.type == pygame.QUIT:
             run = False
 
-        # checks for button presses
+        # checks for keyboard presses
  
         elif event.type == pygame.KEYDOWN:
 
             if event.key == pygame.K_q:
                 run = False
+
+        # FIXA SÅ ATT KNAPPEN MÅSTE VARA TRYCKT OCH SLÄPPT PÅ RUTAN
+        if event.type == pygame.MOUSEBUTTONUP:
+            if event.button == 1:
+                clickCollision(event.pos)
 
     pygame.display.flip()
 pygame.quit()
