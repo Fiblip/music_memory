@@ -9,6 +9,8 @@ class tile4Matrix:
         self.visible = True
         self.data = None
         self.pairID = None
+        self.image = None
+        self.song = None
 
 class tileData:
     def __init__(self):
@@ -36,9 +38,6 @@ black = (0, 0, 0)
 red = (255, 0, 0)
 green = (0, 255, 0)
 blue = (0, 0, 255)
-
-# status variables
-mouseStatus = None
 
 # adjustable parameters
 totalTiles = 22
@@ -172,21 +171,57 @@ def generateTileMatrix():
     
     return tileMatrix
 
-def clickCollision(pos):
+def mouseClick(event, state):
+    global clickedRow
+    global clickedColumn
+    
     counter = 0
+    stopLoop = False
 
-    for i in range(rows):
-        for j in range(columns):
+    if state == "down":
+        for i in range(rows):
+            for j in range(columns):
 
-            if counter > totalTiles - 1:
+                if counter > totalTiles - 1:
+                    clickedRow = None
+                    clickedColumn = None
+                    stopLoop = True
+                    break
+
+                if tileMatrix[i][j].data.collidepoint(event.pos):
+                    clickedRow = i
+                    clickedColumn = j
+                    stopLoop = True
+                    break
+
+                counter += 1
+            
+            if stopLoop:
                 break
 
-            elif(tileMatrix[i][j].data.collidepoint(pos)):
-                tileMatrix[i][j].visible = False
+    elif state == "up":
+        for i in range(rows):
+            for j in range(columns):
 
-            counter += 1
+                if counter > totalTiles - 1:
+                    clickedRow = None
+                    clickedColumn = None
+                    stopLoop = True
+                    break
 
-# code that runs once
+                if (tileMatrix[i][j].data.collidepoint(event.pos)) & (tileMatrix[i][j].visible == True):
+                    if (clickedRow == i) & (clickedColumn == j):
+                        tileMatrix[i][j].visible = False
+                    
+                    stopLoop = True
+                    break
+
+                counter += 1
+
+            if stopLoop:
+                break
+
+# global variables
 rows, columns = calculateRowsColumns(totalTiles)
 sideTileList = calculateSideTiles()   
 tile, board = calculateBoard()
@@ -205,16 +240,18 @@ while run:
             run = False
 
         # checks for keyboard presses
- 
         elif event.type == pygame.KEYDOWN:
 
             if event.key == pygame.K_q:
                 run = False
 
-        # FIXA SÅ ATT KNAPPEN MÅSTE VARA TRYCKT OCH SLÄPPT PÅ RUTAN
-        if event.type == pygame.MOUSEBUTTONUP:
+        if event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:
-                clickCollision(event.pos)
+                mouseClick(event, "down")
+
+        elif event.type == pygame.MOUSEBUTTONUP:
+            if event.button == 1:
+                mouseClick(event, "up")
 
     pygame.display.flip()
 pygame.quit()
