@@ -2,12 +2,11 @@ import pygame
 import os
 import random
 import math
-import copy
 
 pygame.init()
 
 # STÄDA UPP KLASSERNA. SIZE OCH X OCH Y POSITIONER BEHÖVER INTE VARA MED
-class tile4Matrix:
+class tile4Matrix():
     def __init__(self):
         self.visible = True
         self.rect = None
@@ -15,7 +14,7 @@ class tile4Matrix:
         self.image = None
         self.song = None
 
-class tileData:
+class tileData():
     def __init__(self):
         self.size = None
         self.spacing = None
@@ -62,7 +61,7 @@ fps = 60
 displayInfo = pygame.display.Info()
 #screenHeight = displayInfo.current_h
 #screenWidth = displayInfo.current_w
-screenScaleFactor = 40
+screenScaleFactor = 80
 screenHeight = 9*screenScaleFactor
 screenWidth = 16*screenScaleFactor
 screen = pygame.display.set_mode([screenWidth, screenHeight])
@@ -263,6 +262,7 @@ def assignFiles2Tiles(paths):
 
 def mouseClick(event, state):
     global setupAnimation1, setupAnimation2
+    global animationSelection1, animationSelection2
     global clickedRow, clickedColumn
     global numClickedTiles
    
@@ -304,16 +304,17 @@ def mouseClick(event, state):
                     if (tileMatrix[i][j].rect.collidepoint(event.pos)) & (tileMatrix[i][j].visible == True):
                         if (clickedRow == i) & (clickedColumn == j):
                             numClickedTiles += 1
+                            # assign file to side tile
+                            sideTileList[numClickedTiles - 1].clickedTile = tileMatrix[i][j]
                             tileMatrix[i][j].visible = False
 
                             if numClickedTiles == 1:
                                 setupAnimation1 = True
+                                animationSelection1 = "disappear"
                             
                             elif numClickedTiles == 2:
                                 setupAnimation2 = True
-                            
-                            # assign file to side tile
-                            sideTileList[numClickedTiles - 1].clickedTile = tileMatrix[i][j]
+                                animationSelection2 = "disappear"
                         
                         stopLoop = True
                         break
@@ -322,17 +323,6 @@ def mouseClick(event, state):
 
                 if stopLoop:
                     break
-
-def removeFilesFromSideTiles():
-    global numClickedTiles
-
-    sideTileList[0].clickedTile.visible = True
-    sideTileList[0].clickedTile = None
-
-    sideTileList[1].clickedTile.visible = True
-    sideTileList[1].clickedTile = None
-
-    numClickedTiles = 0
 
 def displaySideTileFiles():
     # if the first side tile has a file attatched to it
@@ -354,13 +344,15 @@ def displaySideTileFiles():
             screen.blit(sideTileList[1].clickedTile.song, sideTileList[1].rect)
 
 def animateTile1():
+    global setupAnimation2
+    global animationSelection2
+
     global setupAnimation1
     global runAnimation1
 
-    global endPosX
-    global endPosY
-    global xVel
-    global yVel
+    global centerPosX
+    global centerPosY
+    global counter
 
     global animationTile
     
@@ -368,45 +360,50 @@ def animateTile1():
         setupAnimation1 = False
         runAnimation1 = True
 
-        startPosX = sideTileList[0].clickedTile.rect.centerx
-        startPosY = sideTileList[0].clickedTile.rect.centery
+        counter = 0
 
-        endPosX = sideTileList[0].rect.centerx
-        endPosY = sideTileList[0].rect.centery
-
-        dX = abs(endPosX - startPosX)
-        dY = abs(endPosY - startPosY)
-
-        xVel = dX/(animationTime*fps)
-        yVel = dY/(animationTime*fps)
+        centerPosX = sideTileList[0].clickedTile.rect.centerx
+        centerPosY = sideTileList[0].clickedTile.rect.centery
         
-        animationTile = copy.deepcopy(sideTileList[0].clickedTile.rect)
+        animationTile = sideTileList[0].clickedTile.rect.copy()
 
     if runAnimation1:
-        if animationTile.centerx >= endPosX + xVel:
-            pygame.draw.rect(screen, blue, animationTile, 0, 0, tile.radius)
-
-            # if animation tile is lower down than the side tile (y)
-            if animationTile.centery >= (endPosY + yVel):                
-                animationTile.centerx = round(animationTile.centerx - xVel)
-                animationTile.centery = round(animationTile.centery - yVel)
-                
-            # if the animation tile is higher than the side tile (y)
+        if animationSelection1 == "disappear":
+            if counter < len(tileAnimation):
+                animationTile.width = tileAnimation[counter]
+                animationTile.height = tileAnimation[counter]
+                animationTile.centerx = centerPosX
+                animationTile.centery = centerPosY
+            
             else:
-                animationTile.centerx = round(animationTile.centerx - xVel)
-                animationTile.centery = round(animationTile.centery + yVel)
+                runAnimation1 = False
         
-        else:
-            runAnimation1 = False
+        elif animationSelection1 == "appear":
+            if counter < len(tileAnimation):
+                animationTile.width = tileAnimation[-counter - 1]
+                animationTile.height = tileAnimation[-counter - 1]
+                animationTile.centerx = centerPosX
+                animationTile.centery = centerPosY
+            
+            else:
+                sideTileList[0].clickedTile.visible = True
+                runAnimation1 = False
+                sideTileList[0].clickedTile = None
+                setupAnimation2 = True
+                animationSelection2 = "appear"
+
+        pygame.draw.rect(screen, blue, animationTile, 0, 0, tile.radius)
+        counter += 1
 
 def animateTile2():
+    global numClickedTiles
+
     global setupAnimation2
     global runAnimation2
 
-    global endPosX
-    global endPosY
-    global xVel
-    global yVel
+    global centerPosX
+    global centerPosY
+    global counter
 
     global animationTile
     
@@ -414,35 +411,56 @@ def animateTile2():
         setupAnimation2 = False
         runAnimation2 = True
 
-        startPosX = sideTileList[1].clickedTile.rect.centerx
-        startPosY = sideTileList[1].clickedTile.rect.centery
+        counter = 0
 
-        endPosX = sideTileList[1].rect.centerx
-        endPosY = sideTileList[1].rect.centery
-
-        dX = abs(endPosX - startPosX)
-        dY = abs(endPosY - startPosY)
-
-        xVel = dX/(animationTime*fps)
-        yVel = dY/(animationTime*fps)
-        animationTile = copy.deepcopy(sideTileList[1].clickedTile.rect)
+        centerPosX = sideTileList[1].clickedTile.rect.centerx
+        centerPosY = sideTileList[1].clickedTile.rect.centery
+        
+        animationTile = sideTileList[1].clickedTile.rect.copy()
 
     if runAnimation2:
-        if animationTile.centerx >= endPosX + xVel:
-            pygame.draw.rect(screen, blue, animationTile, 0, 0, tile.radius)
-
-            # if animation tile is lower down than the side tile (y)
-            if animationTile.centery >= (endPosY + yVel):                
-                animationTile.centerx = round(animationTile.centerx - xVel)
-                animationTile.centery = round(animationTile.centery - yVel)
-                
-            # if the animation tile is higher than the side tile (y)
+        if animationSelection2 == "disappear":
+            if counter < len(tileAnimation):
+                animationTile.width = tileAnimation[counter]
+                animationTile.height = tileAnimation[counter]
+                animationTile.centerx = centerPosX
+                animationTile.centery = centerPosY
+            
             else:
-                animationTile.centerx = round(animationTile.centerx - xVel)
-                animationTile.centery = round(animationTile.centery + yVel)
+                runAnimation2 = False
         
-        else:
-            runAnimation2 = False
+        elif animationSelection2 == "appear":
+            if counter < len(tileAnimation):
+                animationTile.width = tileAnimation[-counter - 1]
+                animationTile.height = tileAnimation[-counter - 1]
+                animationTile.centerx = centerPosX
+                animationTile.centery = centerPosY
+            
+            else:
+                sideTileList[1].clickedTile.visible = True
+                runAnimation2 = False
+                numClickedTiles = 0
+                sideTileList[1].clickedTile = None
+
+        pygame.draw.rect(screen, blue, animationTile, 0, 0, tile.radius)
+        counter += 1
+    
+
+def createTileAnimation():
+    dX = 1/fps
+    a = 5
+    x = -0.2
+    c = 1.2
+    scaleFactor = -a*pow(x, 2) + c
+
+    animation = []
+
+    while scaleFactor >= 0:
+        scaleFactor = -a*pow(x, 2) + c
+        animation.append(scaleFactor*tile.size)
+        x += dX
+
+    return animation
 
 # global variables
 totalTiles, path2Files = calculateTotalTiles()
@@ -454,12 +472,16 @@ if(run == True):
     runAnimation2 = False
 
     numClickedTiles = 0
-    animationStarted = False
     rows, columns = calculateRowsColumns(totalTiles)
     sideTileList = calculateSideTiles()   
     tile, board = calculateBoard()
     tileMatrix = generateTileMatrix()
     assignFiles2Tiles(path2Files)
+    
+    tileAnimation = createTileAnimation()
+    animationStarted = False
+    animationSelection1 = None
+    animationSelection2 = None
 
 while run:
     timer.tick(fps)
@@ -485,7 +507,8 @@ while run:
 
             if event.key == pygame.K_RETURN:
                 if numClickedTiles >= 2:
-                    removeFilesFromSideTiles()
+                    setupAnimation1 = True
+                    animationSelection1 = "appear"
 
         # checks for mouse down
         if event.type == pygame.MOUSEBUTTONDOWN:
