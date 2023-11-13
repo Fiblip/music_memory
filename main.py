@@ -1,5 +1,8 @@
 import pygame
+import os
+import random
 import math
+import copy
 
 pygame.init()
 
@@ -7,8 +10,8 @@ pygame.init()
 class tile4Matrix:
     def __init__(self):
         self.visible = True
-        self.data = None
-        self.pairID = None
+        self.rect = None
+        self.pairId = None
         self.image = None
         self.song = None
 
@@ -21,7 +24,8 @@ class tileData:
 
 class sideTileClass():
     def __init__(self):
-        self.data = None
+        self.rect = None
+        self.clickedTile = None
         self.radius = None
 
 class boardClass():
@@ -30,7 +34,6 @@ class boardClass():
         self.width = None
         self.x = None
         self.y = None
-        self.excess = None
 
 # colors
 white = (255, 255, 255)
@@ -40,7 +43,11 @@ green = (0, 255, 0)
 blue = (0, 0, 255)
 
 # adjustable parameters
-totalTiles = 22
+#totalTiles = 22
+rootDir = "current_game"
+imagesFolder = "images"
+songsFolder = "songs"
+
 minRatio = 3/2
 boardScaleFactor = 0.9
 tileScaleFactor = 0.9
@@ -48,13 +55,14 @@ radiusScaleFactor = 10
 outlineScaleFactor = 40
 sideBarScaleFactor = 1/3
 sideTileScaleFactor = 0.65
+animationTime = 1 # in seconds
 fps = 60
 
 # screen, side bar and game variables
 displayInfo = pygame.display.Info()
 #screenHeight = displayInfo.current_h
 #screenWidth = displayInfo.current_w
-screenScaleFactor = 80
+screenScaleFactor = 40
 screenHeight = 9*screenScaleFactor
 screenWidth = 16*screenScaleFactor
 screen = pygame.display.set_mode([screenWidth, screenHeight])
@@ -65,6 +73,34 @@ timer = pygame.time.Clock()
 run = True
 
 # functions
+def calculateTotalTiles():
+    global run
+    path = []
+
+    for relPath, dirs, files in os.walk(rootDir):
+        if imagesFolder in dirs:
+            imagesPath = os.path.join(relPath, imagesFolder)
+            images = os.listdir(imagesPath)
+
+        if songsFolder in dirs:
+            songsPath = os.path.join(relPath, songsFolder)
+            songs = os.listdir(songsPath)
+
+    for image in images:
+        temp = os.path.join(imagesPath, image)
+        path.append(r"%s" % temp)
+
+    for song in songs:
+        temp = os.path.join(songsPath, song)
+        path.append(r"%s" % temp)
+    
+    if len(images) == len(songs):
+        tiles = len(images) + len(songs)
+        return(tiles, path)
+
+    else:
+        run = False
+
 def calculateRowsColumns(product):
     if(product == 8):
         rows = 3
@@ -91,11 +127,11 @@ def calculateSideTiles():
     posX2 = posX1
     posY2 = size + 2*(sideBar.height - 2*size)/3
 
-    sideTileList[0].data = pygame.Rect([posX1, posY1, size, size])
-    sideTileList[1].data = pygame.Rect([posX2, posY2, size, size])
+    sideTileList[0].rect = pygame.Rect([posX1, posY1, size, size])
+    sideTileList[1].rect = pygame.Rect([posX2, posY2, size, size])
 
-    sideTileList[0].radius = round(sideTileList[0].data.width/radiusScaleFactor)
-    sideTileList[1].radius = round(sideTileList[1].data.width/radiusScaleFactor)  
+    sideTileList[0].radius = round(sideTileList[0].rect.width/radiusScaleFactor)
+    sideTileList[1].radius = round(sideTileList[1].rect.width/radiusScaleFactor)  
 
     return(sideTileList)    
 
@@ -103,7 +139,7 @@ def calculateBoard():
     board = boardClass()
     tile = tileData()
 
-    maxBoardHeight = screenHeight - 2*sideTileList[0].data.y
+    maxBoardHeight = screenHeight - 2*sideTileList[0].rect.y
 
     board.width = (screenWidth - sideBar.width)*boardScaleFactor
     tile.size = board.width*tileScaleFactor/columns
@@ -120,7 +156,6 @@ def calculateBoard():
 
     board.y = (screenHeight - board.height)/2
     board.x = sideBar.width + (screenWidth - (sideBar.width + board.width))/2
-    board.excess = rows*columns - totalTiles
 
     tile.radius = round(tile.size/radiusScaleFactor)
     tile.outline = round(tile.size/outlineScaleFactor)
@@ -129,110 +164,314 @@ def calculateBoard():
 
 def drawElements():
     pygame.draw.rect(screen, black, sideBar)
-    pygame.draw.rect(screen, white, sideTileList[0].data, 0, sideTileList[0].radius)
-    pygame.draw.rect(screen, white, sideTileList[1].data, 0, sideTileList[1].radius)
+    pygame.draw.rect(screen, white, sideTileList[0].rect, 0, sideTileList[0].radius)
+    pygame.draw.rect(screen, white, sideTileList[1].rect, 0, sideTileList[1].radius)
     #boardObject = pygame.draw.rect(screen, black, [board.x, board.y, board.width, board.height])
 
 def drawTiles():
-    for i in range(rows):
-        if(i == (rows - 1)):
-            for j in range(columns - board.excess):
-                if(tileMatrix[i][j].visible == True):
-                    pygame.draw.rect(screen, blue, tileMatrix[i][j].data, 0, tile.radius)
-
-                    if(tileMatrix[i][j].data.collidepoint(pygame.mouse.get_pos())):
-                        pygame.draw.rect(screen, green, tileMatrix[i][j].data, tile.outline, tile.radius)
-
-        else:
-            for j in range(columns):
-                if(tileMatrix[i][j].visible == True):
-                    pygame.draw.rect(screen, blue, tileMatrix[i][j].data, 0, tile.radius)
-
-                    if(tileMatrix[i][j].data.collidepoint(pygame.mouse.get_pos())):
-                        pygame.draw.rect(screen, green, tileMatrix[i][j].data, tile.outline, tile.radius)
-
-# IMPLEMENTERA SAMMA KOD SOM VID clickCollision
-def generateTileMatrix():
-    tileMatrix = [[tile4Matrix() for i in range(columns)] for j in range(rows)]
-    
-    if(board.excess != 0):
-        for i in range(board.excess):
-            tileMatrix[rows - 1][columns - 1 - i] = None
-
-    for i in range(rows):
-        if(i == (rows - 1)):
-            for j in range(columns - board.excess):
-
-                tileMatrix[i][j].data = pygame.Rect([board.x + j*(tile.size + tile.spacing), board.y + i*(tile.size + tile.spacing), tile.size, tile.size])
-
-        else:
-            for j in range(columns):
-                tileMatrix[i][j].data = pygame.Rect([board.x + j*(tile.size + tile.spacing), board.y + i*(tile.size + tile.spacing), tile.size, tile.size])
-    
-    return tileMatrix
-
-def mouseClick(event, state):
-    global clickedRow
-    global clickedColumn
-    
     counter = 0
     stopLoop = False
 
-    if state == "down":
-        for i in range(rows):
-            for j in range(columns):
+    for i in range(rows):
+        for j in range(columns):
+            counter += 1
 
-                if counter > totalTiles - 1:
-                    clickedRow = None
-                    clickedColumn = None
-                    stopLoop = True
-                    break
-
-                if tileMatrix[i][j].data.collidepoint(event.pos):
-                    clickedRow = i
-                    clickedColumn = j
-                    stopLoop = True
-                    break
-
-                counter += 1
+            if(tileMatrix[i][j].visible == True):
+                pygame.draw.rect(screen, blue, tileMatrix[i][j].rect, 0, tile.radius)
             
-            if stopLoop:
+            if counter >= totalTiles:
+                stopLoop = True
                 break
+        
+        if stopLoop:
+            break
 
-    elif state == "up":
+def outlineTiles():
+    counter = 0
+    stopLoop = False
+
+    if numClickedTiles < 2:
+
         for i in range(rows):
             for j in range(columns):
-
-                if counter > totalTiles - 1:
-                    clickedRow = None
-                    clickedColumn = None
-                    stopLoop = True
-                    break
-
-                if (tileMatrix[i][j].data.collidepoint(event.pos)) & (tileMatrix[i][j].visible == True):
-                    if (clickedRow == i) & (clickedColumn == j):
-                        tileMatrix[i][j].visible = False
-                    
-                    stopLoop = True
-                    break
-
                 counter += 1
 
+                if(tileMatrix[i][j].visible == True):
+                    if(tileMatrix[i][j].rect.collidepoint(pygame.mouse.get_pos())):
+                        pygame.draw.rect(screen, green, tileMatrix[i][j].rect, tile.outline, tile.radius)
+            
+                if counter >= totalTiles:
+                    stopLoop = True
+                    break
+        
             if stopLoop:
                 break
+
+def generateTileMatrix():
+    counter = 0
+    stopLoop = False
+    tileMatrix = [[None for i in range(columns)] for j in range(rows)]
+
+    for i in range(rows):
+        for j in range(columns):
+            counter += 1
+            tileMatrix[i][j] = tile4Matrix()
+            tileMatrix[i][j].rect = pygame.Rect([board.x + j*(tile.size + tile.spacing), board.y + i*(tile.size + tile.spacing), tile.size, tile.size])
+
+            if counter >= totalTiles:
+                stopLoop = True
+                break
+            
+        if stopLoop:
+            break
+    
+    return tileMatrix
+
+def assignFiles2Tiles(paths):
+    counter = 0
+    stopLoop = False
+
+    for i in range(rows):
+        for j in range(columns):
+            counter += 1
+
+            file = random.choice(paths)
+            paths.remove(file)
+
+            # extracts the number/name for each file
+            temp = file.split("\\")[-1]
+            id = temp.split(".")[0]
+
+            if imagesFolder in file:
+                image = pygame.image.load(file)
+                scaledImage = pygame.transform.scale(image, sideTileList[0].rect.size)
+                tileMatrix[i][j].image = scaledImage
+                tileMatrix[i][j].pairId = id
+            
+            else:
+                song = pygame.image.load(file)
+                scaledSong = pygame.transform.scale(song, sideTileList[0].rect.size)
+                tileMatrix[i][j].song = scaledSong
+                tileMatrix[i][j].pairId = id
+            
+            if counter >= totalTiles:
+                stopLoop = True
+                break
+
+        if stopLoop:
+            break
+
+def mouseClick(event, state):
+    global setupAnimation1, setupAnimation2
+    global clickedRow, clickedColumn
+    global numClickedTiles
+   
+    counter = 0
+    stopLoop = False
+    
+    if numClickedTiles < 2:
+        if state == "down":
+            for i in range(rows):
+                for j in range(columns):
+
+                    if counter > totalTiles - 1:
+                        clickedRow = None
+                        clickedColumn = None
+                        stopLoop = True
+                        break
+
+                    if tileMatrix[i][j].rect.collidepoint(event.pos):
+                        clickedRow = i
+                        clickedColumn = j
+                        stopLoop = True
+                        break
+
+                    counter += 1
+                
+                if stopLoop:
+                    break
+
+        elif state == "up":
+            for i in range(rows):
+                for j in range(columns):
+
+                    if counter > totalTiles - 1:
+                        clickedRow = None
+                        clickedColumn = None
+                        stopLoop = True
+                        break
+
+                    if (tileMatrix[i][j].rect.collidepoint(event.pos)) & (tileMatrix[i][j].visible == True):
+                        if (clickedRow == i) & (clickedColumn == j):
+                            numClickedTiles += 1
+                            tileMatrix[i][j].visible = False
+
+                            if numClickedTiles == 1:
+                                setupAnimation1 = True
+                            
+                            elif numClickedTiles == 2:
+                                setupAnimation2 = True
+                            
+                            # assign file to side tile
+                            sideTileList[numClickedTiles - 1].clickedTile = tileMatrix[i][j]
+                        
+                        stopLoop = True
+                        break
+
+                    counter += 1
+
+                if stopLoop:
+                    break
+
+def removeFilesFromSideTiles():
+    global numClickedTiles
+
+    sideTileList[0].clickedTile.visible = True
+    sideTileList[0].clickedTile = None
+
+    sideTileList[1].clickedTile.visible = True
+    sideTileList[1].clickedTile = None
+
+    numClickedTiles = 0
+
+def displaySideTileFiles():
+    # if the first side tile has a file attatched to it
+    if sideTileList[0].clickedTile != None:
+        # if the clicked tile is an image
+        if sideTileList[0].clickedTile.image != None:
+            screen.blit(sideTileList[0].clickedTile.image, sideTileList[0].rect)
+        # if the clicked tile is a song
+        else:
+            screen.blit(sideTileList[0].clickedTile.song, sideTileList[0].rect)
+
+    # if the second side tile has a file attatched to it
+    if sideTileList[1].clickedTile != None:
+        # if the clicked tile is an image
+        if sideTileList[1].clickedTile.image != None:
+            screen.blit(sideTileList[1].clickedTile.image, sideTileList[1].rect)
+        # if the clicked tile is a song
+        else:
+            screen.blit(sideTileList[1].clickedTile.song, sideTileList[1].rect)
+
+def animateTile1():
+    global setupAnimation1
+    global runAnimation1
+
+    global endPosX
+    global endPosY
+    global xVel
+    global yVel
+
+    global animationTile
+    
+    if setupAnimation1 == True:
+        setupAnimation1 = False
+        runAnimation1 = True
+
+        startPosX = sideTileList[0].clickedTile.rect.centerx
+        startPosY = sideTileList[0].clickedTile.rect.centery
+
+        endPosX = sideTileList[0].rect.centerx
+        endPosY = sideTileList[0].rect.centery
+
+        dX = abs(endPosX - startPosX)
+        dY = abs(endPosY - startPosY)
+
+        xVel = dX/(animationTime*fps)
+        yVel = dY/(animationTime*fps)
+        
+        animationTile = copy.deepcopy(sideTileList[0].clickedTile.rect)
+
+    if runAnimation1:
+        if animationTile.centerx >= endPosX + xVel:
+            pygame.draw.rect(screen, blue, animationTile, 0, 0, tile.radius)
+
+            # if animation tile is lower down than the side tile (y)
+            if animationTile.centery >= (endPosY + yVel):                
+                animationTile.centerx = round(animationTile.centerx - xVel)
+                animationTile.centery = round(animationTile.centery - yVel)
+                
+            # if the animation tile is higher than the side tile (y)
+            else:
+                animationTile.centerx = round(animationTile.centerx - xVel)
+                animationTile.centery = round(animationTile.centery + yVel)
+        
+        else:
+            runAnimation1 = False
+
+def animateTile2():
+    global setupAnimation2
+    global runAnimation2
+
+    global endPosX
+    global endPosY
+    global xVel
+    global yVel
+
+    global animationTile
+    
+    if setupAnimation2 == True:
+        setupAnimation2 = False
+        runAnimation2 = True
+
+        startPosX = sideTileList[1].clickedTile.rect.centerx
+        startPosY = sideTileList[1].clickedTile.rect.centery
+
+        endPosX = sideTileList[1].rect.centerx
+        endPosY = sideTileList[1].rect.centery
+
+        dX = abs(endPosX - startPosX)
+        dY = abs(endPosY - startPosY)
+
+        xVel = dX/(animationTime*fps)
+        yVel = dY/(animationTime*fps)
+        animationTile = copy.deepcopy(sideTileList[1].clickedTile.rect)
+
+    if runAnimation2:
+        if animationTile.centerx >= endPosX + xVel:
+            pygame.draw.rect(screen, blue, animationTile, 0, 0, tile.radius)
+
+            # if animation tile is lower down than the side tile (y)
+            if animationTile.centery >= (endPosY + yVel):                
+                animationTile.centerx = round(animationTile.centerx - xVel)
+                animationTile.centery = round(animationTile.centery - yVel)
+                
+            # if the animation tile is higher than the side tile (y)
+            else:
+                animationTile.centerx = round(animationTile.centerx - xVel)
+                animationTile.centery = round(animationTile.centery + yVel)
+        
+        else:
+            runAnimation2 = False
 
 # global variables
-rows, columns = calculateRowsColumns(totalTiles)
-sideTileList = calculateSideTiles()   
-tile, board = calculateBoard()
-tileMatrix = generateTileMatrix()
+totalTiles, path2Files = calculateTotalTiles()
+# run is set to false if the amount of songs and images are not equal
+if(run == True):
+    setupAnimation1 = False
+    setupAnimation2 = False
+    runAnimation1 = False
+    runAnimation2 = False
+
+    numClickedTiles = 0
+    animationStarted = False
+    rows, columns = calculateRowsColumns(totalTiles)
+    sideTileList = calculateSideTiles()   
+    tile, board = calculateBoard()
+    tileMatrix = generateTileMatrix()
+    assignFiles2Tiles(path2Files)
 
 while run:
     timer.tick(fps)
     screen.fill(white)
     drawElements()
     drawTiles()
+    outlineTiles()
+    displaySideTileFiles()
+    animateTile1()
+    animateTile2()
 
+    # event handler
     for event in pygame.event.get():
 
         # if X-button is pressed
@@ -241,14 +480,19 @@ while run:
 
         # checks for keyboard presses
         elif event.type == pygame.KEYDOWN:
-
             if event.key == pygame.K_q:
                 run = False
 
+            if event.key == pygame.K_RETURN:
+                if numClickedTiles >= 2:
+                    removeFilesFromSideTiles()
+
+        # checks for mouse down
         if event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:
                 mouseClick(event, "down")
 
+        # checks for mouse button up
         elif event.type == pygame.MOUSEBUTTONUP:
             if event.button == 1:
                 mouseClick(event, "up")
