@@ -6,7 +6,7 @@ import math
 pygame.init()
 
 # STÄDA UPP KLASSERNA. SIZE OCH X OCH Y POSITIONER BEHÖVER INTE VARA MED
-class tile4Matrix():
+class tile4Matrix:
     def __init__(self):
         self.visible = True
         self.rect = None
@@ -14,25 +14,97 @@ class tile4Matrix():
         self.image = None
         self.song = None
 
-class tileData():
+class tileData:
     def __init__(self):
         self.size = None
         self.spacing = None
         self.radius = None
         self.outline = None
 
-class sideTileClass():
+class sideTileClass:
     def __init__(self):
         self.rect = None
         self.clickedTile = None
         self.radius = None
 
-class boardClass():
+class boardClass:
     def __init__(self):
         self.height = None
         self.width = None
         self.x = None
         self.y = None
+
+class animationClass:
+    def __init__(self, id):
+        self.id = id
+        self.object = None
+        self.counter = 0
+        self.animation2Run = None
+        self.runAnimation = False
+        self.status = None
+
+    def startAnimation(self, startAnimation, object = None):
+        if object != None:
+            self.object = object
+        
+        # if an object is assigned to the animation tile
+        if self.object != None:
+            if startAnimation == "disappear":
+                self.animation2Run = disappearAnimation
+                self.status = "started disappear"
+
+            # the animation to start is "appear"
+            else:
+                self.animation2Run = appearAnimation
+                self.status = "started appear"
+            
+            self.runAnimation = True
+
+    def animateTile(self, rect):
+        scaledRect = rect.scale_by(self.animation2Run[self.counter])
+        pygame.draw.rect(screen, blue, scaledRect, 0, 0, tile.radius)
+        self.counter += 1
+        self.animationStatus()
+
+    def animateSideTile(self, rect):
+        global displaySideTile1
+        global displaySideTile2
+
+        scaledRect = rect.scale_by(self.animation2Run[self.counter])
+        scaledImage = pygame.transform.scale(self.object.clickedTile.image, scaledRect.size)
+        screen.blit(scaledImage, scaledRect)
+        self.counter += 1
+        self.animationStatus()
+
+    def animationStatus(self):
+        # checks if the animation is finished
+        if self.counter > len(self.animation2Run) - 1:
+            if self.id == "tile":     
+                if self.status == "started disappear":
+                    self.status = "finished disappear"
+                
+                # the finished animation was "appear"
+                else:
+                    self.status = "finished appear"
+                    self.object.clickedTile.visible = True
+                    self.clearData()
+            
+            # if the object is a side tile
+            else:
+                if self.status == "started disappear":
+                    self.status = "finished disappear"
+                    self.clearData()
+                
+                # the finished animation was "appear"
+                else:
+                    self.status = "finished appear"
+
+            self.counter = 0
+            self.runAnimation = False
+    
+    def clearData(self):
+        self.object = None
+        self.animation2Run = None
 
 # colors
 white = (255, 255, 255)
@@ -50,8 +122,10 @@ songsFolder = "songs"
 minRatio = 3/2
 boardScaleFactor = 0.9
 tileScaleFactor = 0.9
-radiusScaleFactor = 10
-outlineScaleFactor = 40
+radiusScaleFactor = 1000
+outlineScaleFactor = 1000
+#radiusScaleFactor = 10
+#outlineScaleFactor = 40
 sideBarScaleFactor = 1/3
 sideTileScaleFactor = 0.65
 animationTime = 1 # in seconds
@@ -190,7 +264,6 @@ def outlineTiles():
     stopLoop = False
 
     if numClickedTiles < 2:
-
         for i in range(rows):
             for j in range(columns):
                 counter += 1
@@ -250,7 +323,8 @@ def assignFiles2Tiles(paths):
             else:
                 song = pygame.image.load(file)
                 scaledSong = pygame.transform.scale(song, sideTileList[0].rect.size)
-                tileMatrix[i][j].song = scaledSong
+                # ÄNDRA HÄR
+                tileMatrix[i][j].image = scaledSong
                 tileMatrix[i][j].pairId = id
             
             if counter >= totalTiles:
@@ -261,8 +335,6 @@ def assignFiles2Tiles(paths):
             break
 
 def mouseClick(event, state):
-    global setupAnimation1, setupAnimation2
-    global animationSelection1, animationSelection2
     global clickedRow, clickedColumn
     global numClickedTiles
    
@@ -309,12 +381,10 @@ def mouseClick(event, state):
                             tileMatrix[i][j].visible = False
 
                             if numClickedTiles == 1:
-                                setupAnimation1 = True
-                                animationSelection1 = "disappear"
+                                tile1.startAnimation("disappear", sideTileList[0])
                             
                             elif numClickedTiles == 2:
-                                setupAnimation2 = True
-                                animationSelection2 = "disappear"
+                                tile2.startAnimation("disappear", sideTileList[1])
                         
                         stopLoop = True
                         break
@@ -325,163 +395,124 @@ def mouseClick(event, state):
                     break
 
 def displaySideTileFiles():
-    # if the first side tile has a file attatched to it
-    if sideTileList[0].clickedTile != None:
-        # if the clicked tile is an image
-        if sideTileList[0].clickedTile.image != None:
-            screen.blit(sideTileList[0].clickedTile.image, sideTileList[0].rect)
-        # if the clicked tile is a song
-        else:
-            screen.blit(sideTileList[0].clickedTile.song, sideTileList[0].rect)
-
-    # if the second side tile has a file attatched to it
-    if sideTileList[1].clickedTile != None:
-        # if the clicked tile is an image
-        if sideTileList[1].clickedTile.image != None:
-            screen.blit(sideTileList[1].clickedTile.image, sideTileList[1].rect)
-        # if the clicked tile is a song
-        else:
-            screen.blit(sideTileList[1].clickedTile.song, sideTileList[1].rect)
-
-def animateTile1():
-    global setupAnimation2
-    global animationSelection2
-
-    global setupAnimation1
-    global runAnimation1
-
-    global centerPosX
-    global centerPosY
-    global counter
-
-    global animationTile
+    if sideTile1.status == "finished appear":
+        screen.blit(sideTileList[0].clickedTile.image, sideTileList[0].rect)
     
-    if setupAnimation1 == True:
-        setupAnimation1 = False
-        runAnimation1 = True
+    if sideTile2.status == "finished appear":
+        screen.blit(sideTileList[1].clickedTile.image, sideTileList[1].rect)
 
-        counter = 0
-
-        centerPosX = sideTileList[0].clickedTile.rect.centerx
-        centerPosY = sideTileList[0].clickedTile.rect.centery
-        
-        animationTile = sideTileList[0].clickedTile.rect.copy()
-
-    if runAnimation1:
-        if animationSelection1 == "disappear":
-            if counter < len(tileAnimation):
-                animationTile.width = tileAnimation[counter]
-                animationTile.height = tileAnimation[counter]
-                animationTile.centerx = centerPosX
-                animationTile.centery = centerPosY
-            
-            else:
-                runAnimation1 = False
-        
-        elif animationSelection1 == "appear":
-            if counter < len(tileAnimation):
-                animationTile.width = tileAnimation[-counter - 1]
-                animationTile.height = tileAnimation[-counter - 1]
-                animationTile.centerx = centerPosX
-                animationTile.centery = centerPosY
-            
-            else:
-                sideTileList[0].clickedTile.visible = True
-                runAnimation1 = False
-                sideTileList[0].clickedTile = None
-                setupAnimation2 = True
-                animationSelection2 = "appear"
-
-        pygame.draw.rect(screen, blue, animationTile, 0, 0, tile.radius)
-        counter += 1
-
-def animateTile2():
+def animationHandler():
     global numClickedTiles
-
-    global setupAnimation2
-    global runAnimation2
-
-    global centerPosX
-    global centerPosY
-    global counter
-
-    global animationTile
     
-    if setupAnimation2 == True:
-        setupAnimation2 = False
-        runAnimation2 = True
+    if tile1.runAnimation == True:
+        tile1.animateTile(tile1.object.clickedTile.rect)
 
-        counter = 0
+        if tile1.status == "finished disappear":
+            sideTile1.startAnimation("appear", sideTileList[0])
 
-        centerPosX = sideTileList[1].clickedTile.rect.centerx
-        centerPosY = sideTileList[1].clickedTile.rect.centery
-        
-        animationTile = sideTileList[1].clickedTile.rect.copy()
+        elif tile1.status == "finished appear":
+            sideTile2.startAnimation("disappear", sideTileList[1])
 
-    if runAnimation2:
-        if animationSelection2 == "disappear":
-            if counter < len(tileAnimation):
-                animationTile.width = tileAnimation[counter]
-                animationTile.height = tileAnimation[counter]
-                animationTile.centerx = centerPosX
-                animationTile.centery = centerPosY
-            
+    if tile2.runAnimation == True:
+        tile2.animateTile(tile2.object.clickedTile.rect)
+
+        if tile2.status == "finished disappear":
+            sideTile2.startAnimation("appear", sideTileList[1])
+
+        elif tile2.status == "finished appear":
+            numClickedTiles = 0
+
+    if sideTile1.runAnimation == True:
+        sideTile1.animateSideTile(sideTile1.object.rect)
+
+        if sideTile1.status == "finished disappear":
+            # if the two tiles didn't match
+            if tilesMatch != True:
+                tile1.startAnimation("appear", sideTileList[0])
+
+    if sideTile2.runAnimation == True:
+        sideTile2.animateSideTile(sideTile2.object.rect)
+
+        if sideTile2.status == "finished disappear":
+
+            if tilesMatch == True:
+                resetAfterMatch()
+
             else:
-                runAnimation2 = False
-        
-        elif animationSelection2 == "appear":
-            if counter < len(tileAnimation):
-                animationTile.width = tileAnimation[-counter - 1]
-                animationTile.height = tileAnimation[-counter - 1]
-                animationTile.centerx = centerPosX
-                animationTile.centery = centerPosY
-            
-            else:
-                sideTileList[1].clickedTile.visible = True
-                runAnimation2 = False
-                numClickedTiles = 0
-                sideTileList[1].clickedTile = None
+                tile2.startAnimation("appear", sideTileList[1])
 
-        pygame.draw.rect(screen, blue, animationTile, 0, 0, tile.radius)
-        counter += 1
-    
-
-def createTileAnimation():
+def createAnimations():
     dX = 1/fps
-    a = 5
-    x = -0.2
-    c = 1.2
-    scaleFactor = -a*pow(x, 2) + c
+    a = -8
+    x = -0.112
+    c = 1.1
 
-    animation = []
+    disappear = []
 
-    while scaleFactor >= 0:
-        scaleFactor = -a*pow(x, 2) + c
-        animation.append(scaleFactor*tile.size)
-        x += dX
+    while True:
+        scaleFactor = a*pow(x, 2) + c
 
-    return animation
+        if scaleFactor < 0:
+            break
+        
+        else:
+            disappear.append(scaleFactor)
+            x += dX
+
+    appear = disappear.copy()
+    appear.reverse()
+
+    return disappear, appear
+
+def checkIfMatch():
+    global tilesMatch
+    global tilesLeftOnBoard
+
+    id1 = sideTileList[0].clickedTile.pairId
+    id2 = sideTileList[1].clickedTile.pairId
+
+    if(id1 == id2):
+        tilesMatch = True
+        sideTile1.startAnimation("dissapear", sideTileList[0])
+        sideTile2.startAnimation("dissapear", sideTileList[1])
+
+        tilesLeftOnBoard -= 2
+        if tilesLeftOnBoard == 0:
+            print("DU VANN!!!")
+
+def resetAfterMatch():
+    global numClickedTiles
+    global tilesMatch
+
+    tile1.clearData()
+    tile2.clearData()
+
+    numClickedTiles = 0
+    tilesMatch = False
 
 # global variables
 totalTiles, path2Files = calculateTotalTiles()
 # run is set to false if the amount of songs and images are not equal
 if(run == True):
-    setupAnimation1 = False
-    setupAnimation2 = False
-    runAnimation1 = False
-    runAnimation2 = False
-
     numClickedTiles = 0
+    numEnterClicks = 0
+    tilesMatch = False
+    tilesLeftOnBoard = totalTiles
+
     rows, columns = calculateRowsColumns(totalTiles)
     sideTileList = calculateSideTiles()   
     tile, board = calculateBoard()
     tileMatrix = generateTileMatrix()
     assignFiles2Tiles(path2Files)
     
-    tileAnimation = createTileAnimation()
-    animationStarted = False
-    animationSelection1 = None
-    animationSelection2 = None
+    tile1 = animationClass("tile")
+    tile2 = animationClass("tile")
+    sideTile1 = animationClass("sideTile")
+    sideTile2 = animationClass("sideTile")
+    disappearAnimation, appearAnimation = createAnimations()
+
+    displaySideTile1 = False
+    displaySideTile2 = False
 
 while run:
     timer.tick(fps)
@@ -490,8 +521,7 @@ while run:
     drawTiles()
     outlineTiles()
     displaySideTileFiles()
-    animateTile1()
-    animateTile2()
+    animationHandler()
 
     # event handler
     for event in pygame.event.get():
@@ -507,8 +537,15 @@ while run:
 
             if event.key == pygame.K_RETURN:
                 if numClickedTiles >= 2:
-                    setupAnimation1 = True
-                    animationSelection1 = "appear"
+                    checkIfMatch()
+                    if tilesMatch == True:
+                        print("MATCH!!!")
+                        sideTile1.startAnimation("disappear")
+                        sideTile2.startAnimation("disappear")
+
+
+                    else:
+                        sideTile1.startAnimation("disappear")                    
 
         # checks for mouse down
         if event.type == pygame.MOUSEBUTTONDOWN:
