@@ -24,8 +24,8 @@ class tileData:
 class sideTileClass:
     def __init__(self):
         self.rect = None
-        self.clickedTile = None
         self.radius = None
+        self.clickedTile = None
 
 class boardClass:
     def __init__(self):
@@ -51,13 +51,21 @@ class animationClass:
         if self.object != None:
             if startAnimation == "disappear":
                 self.animation2Run = disappearAnimation
+                
+                if (self.id == "tile1") or (self.id == "tile2"):
+                    self.object.clickedTile.visible = False
+                
                 self.status = "started disappear"
 
-            # the animation to start is "appear"
-            else:
+            elif startAnimation == "appear":
                 self.animation2Run = appearAnimation
                 self.status = "started appear"
             
+            # only side tiles can run the match animation
+            elif startAnimation == "match":
+                    self.animation2Run = disappearAnimation
+                    self.status = "started match"
+
             self.runAnimation = True
 
     def animateTile(self, rect):
@@ -79,11 +87,10 @@ class animationClass:
     def animationStatus(self):
         # checks if the animation is finished
         if self.counter > len(self.animation2Run) - 1:
-            if self.id == "tile":     
-                if self.status == "started disappear":
+            if (self.id == "tile1") or (self.id == "tile2"):  
+                if self.status == "started disappear": 
                     self.status = "finished disappear"
-                
-                # the finished animation was "appear"
+                    
                 else:
                     self.status = "finished appear"
                     self.object.clickedTile.visible = True
@@ -94,10 +101,13 @@ class animationClass:
                 if self.status == "started disappear":
                     self.status = "finished disappear"
                     self.clearData()
-                
-                # the finished animation was "appear"
-                else:
+
+                elif self.status == "started appear":
                     self.status = "finished appear"
+                
+                # the finished animation was "match"
+                else:
+                    self.status = "finished match"
 
             self.counter = 0
             self.runAnimation = False
@@ -123,9 +133,7 @@ minRatio = 3/2
 boardScaleFactor = 0.9
 tileScaleFactor = 0.9
 radiusScaleFactor = 1000
-outlineScaleFactor = 1000
-#radiusScaleFactor = 10
-#outlineScaleFactor = 40
+outlineScaleFactor = 40
 sideBarScaleFactor = 1/3
 sideTileScaleFactor = 0.65
 animationTime = 1 # in seconds
@@ -378,7 +386,6 @@ def mouseClick(event, state):
                             numClickedTiles += 1
                             # assign file to side tile
                             sideTileList[numClickedTiles - 1].clickedTile = tileMatrix[i][j]
-                            tileMatrix[i][j].visible = False
 
                             if numClickedTiles == 1:
                                 tile1.startAnimation("disappear", sideTileList[0])
@@ -403,6 +410,7 @@ def displaySideTileFiles():
 
 def animationHandler():
     global numClickedTiles
+    global tilesMatch
     
     if tile1.runAnimation == True:
         tile1.animateTile(tile1.object.clickedTile.rect)
@@ -417,7 +425,12 @@ def animationHandler():
         tile2.animateTile(tile2.object.clickedTile.rect)
 
         if tile2.status == "finished disappear":
-            sideTile2.startAnimation("appear", sideTileList[1])
+            # added do fix potential softlock
+            if (tilesMatch == True) & (tile2.status == "finished disappear"):
+                resetAfterMatch()
+            
+            else:
+                sideTile2.startAnimation("appear", sideTileList[1])
 
         elif tile2.status == "finished appear":
             numClickedTiles = 0
@@ -426,20 +439,13 @@ def animationHandler():
         sideTile1.animateSideTile(sideTile1.object.rect)
 
         if sideTile1.status == "finished disappear":
-            # if the two tiles didn't match
-            if tilesMatch != True:
-                tile1.startAnimation("appear", sideTileList[0])
+            tile1.startAnimation("appear", sideTileList[0])
 
     if sideTile2.runAnimation == True:
         sideTile2.animateSideTile(sideTile2.object.rect)
 
         if sideTile2.status == "finished disappear":
-
-            if tilesMatch == True:
-                resetAfterMatch()
-
-            else:
-                tile2.startAnimation("appear", sideTileList[1])
+            tile2.startAnimation("appear", sideTileList[1])
 
 def createAnimations():
     dX = 1/fps
@@ -468,17 +474,23 @@ def checkIfMatch():
     global tilesMatch
     global tilesLeftOnBoard
 
-    id1 = sideTileList[0].clickedTile.pairId
-    id2 = sideTileList[1].clickedTile.pairId
-
-    if(id1 == id2):
+    if sideTileList[0].clickedTile.pairId == sideTileList[1].clickedTile.pairId:
         tilesMatch = True
-        sideTile1.startAnimation("dissapear", sideTileList[0])
-        sideTile2.startAnimation("dissapear", sideTileList[1])
-
         tilesLeftOnBoard -= 2
+
+        sideTile1.startAnimation("match")
+        sideTile2.startAnimation("match")
+
+        # added to fix bug
+        if tile2.status == "finished disappear":
+            resetAfterMatch()
+
         if tilesLeftOnBoard == 0:
             print("DU VANN!!!")
+    
+    # the tiles didn't match
+    else:
+        sideTile1.startAnimation("disappear")  
 
 def resetAfterMatch():
     global numClickedTiles
@@ -487,8 +499,8 @@ def resetAfterMatch():
     tile1.clearData()
     tile2.clearData()
 
-    numClickedTiles = 0
     tilesMatch = False
+    numClickedTiles = 0
 
 # global variables
 totalTiles, path2Files = calculateTotalTiles()
@@ -505,10 +517,10 @@ if(run == True):
     tileMatrix = generateTileMatrix()
     assignFiles2Tiles(path2Files)
     
-    tile1 = animationClass("tile")
-    tile2 = animationClass("tile")
-    sideTile1 = animationClass("sideTile")
-    sideTile2 = animationClass("sideTile")
+    tile1 = animationClass("tile1")
+    tile2 = animationClass("tile2")
+    sideTile1 = animationClass("sideTile1")
+    sideTile2 = animationClass("sideTile2")
     disappearAnimation, appearAnimation = createAnimations()
 
     displaySideTile1 = False
@@ -535,17 +547,9 @@ while run:
             if event.key == pygame.K_q:
                 run = False
 
-            if event.key == pygame.K_RETURN:
+            if event.key == pygame.K_RETURN:                
                 if numClickedTiles >= 2:
-                    checkIfMatch()
-                    if tilesMatch == True:
-                        print("MATCH!!!")
-                        sideTile1.startAnimation("disappear")
-                        sideTile2.startAnimation("disappear")
-
-
-                    else:
-                        sideTile1.startAnimation("disappear")                    
+                    checkIfMatch()                 
 
         # checks for mouse down
         if event.type == pygame.MOUSEBUTTONDOWN:
