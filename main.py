@@ -3,16 +3,111 @@ import os
 import random
 import math
 
-pygame.init()
-
-# STÄDA UPP KLASSERNA. SIZE OCH X OCH Y POSITIONER BEHÖVER INTE VARA MED
 class tile4Matrix:
     def __init__(self):
         self.visible = True
         self.rect = None
         self.pairId = None
         self.image = None
-        self.song = None
+        self.sound = None
+        self.speakerAnimationCounter = 0
+
+    def nextSoundAnimationImage(self):
+        if self.sound != None:
+            image = pygame.image.load(speakerAnimation[math.floor(self.speakerAnimationCounter)])
+            scaledImage = pygame.transform.scale(image, sideTile1.rect.size)
+            self.image = scaledImage
+
+            self.speakerAnimationCounter += speakerAnimationSpeed
+            if math.floor(self.speakerAnimationCounter) > len(os.listdir(speakerAnimationFolder)) - 1:
+                self.speakerAnimationCounter = 0
+
+class musicClass:
+    def __init__(self, backgroundMusic, fadeIn, fadeOut):
+        self.backgroundMusic = backgroundMusic
+        self.backgroundMusicResumePosition = None
+        self.timeSinceLastPause = 0
+        self.fadeOut = fadeOut
+        self.fadeIn = fadeIn
+        self.currentlyPlaying = None
+        self.tileSound = None
+
+        pygame.mixer.music.load(self.backgroundMusic)
+        pygame.mixer.music.play()
+        self.currentlyPlaying = self.backgroundMusic
+        pygame.mixer.music.set_volume(backgroundMusicVolume)
+        pygame.mixer.music.set_endevent(RESTART_BACKGROUND_SONG)
+
+    def resumeBackgroundMusic(self):
+        global animateSideTile1Sound
+        global animateSideTile2Sound
+
+        pygame.mixer.music.load(self.backgroundMusic)
+        pygame.mixer.music.play(0, self.backgroundMusicResumePosition/1000, self.fadeIn)
+        pygame.mixer.music.set_volume(backgroundMusicVolume)
+        self.currentlyPlaying = self.backgroundMusic
+        pygame.mixer.music.set_endevent(RESTART_BACKGROUND_SONG)
+        self.backgroundMusicResumePosition = None
+
+        animateSideTile1Sound = False
+        animateSideTile2Sound = False
+
+    def soundHandler(self, caller):
+        if music.tileSound == None:
+            return
+
+        elif caller == sideTile1:
+            if self.tileSound == sideTile1.clickedTile.sound:
+                self.playTileSound()
+        
+        else:
+            if self.tileSound == sideTile2.clickedTile.sound:
+                self.playTileSound()
+
+    def playTileSound(self):
+        pygame.mixer.music.unload()
+        pygame.mixer.music.load(self.tileSound)
+        self.currentlyPlaying = self.tileSound
+        pygame.mixer.music.play()
+        pygame.mixer.music.set_volume(soundVolume)
+        pygame.mixer.music.set_endevent(RESUME_BACKGROUND_SONG)
+
+        self.startSoundAnimation()
+    
+    def queueTileSound(self):
+        if self.backgroundMusicResumePosition == None:
+            self.backgroundMusicResumePosition = pygame.mixer.music.get_pos() + self.timeSinceLastPause + self.fadeOut
+            self.timeSinceLastPause = self.backgroundMusicResumePosition
+
+        pygame.mixer.music.fadeout(self.fadeOut)
+        pygame.mixer.music.set_endevent(MUSIC_CHANNEL_STOPPED)
+
+    def restartBackgroundMusic(self):
+        pygame.mixer.music.play()
+        self.timeSinceLastPause = 0
+
+    def reset(self):
+        if self.currentlyPlaying != self.backgroundMusic:
+            pygame.mixer.music.fadeout(self.fadeOut)
+
+        # fixes bug where the reset function is called just as the MUSIC_CHANNEL_STOPPED end event is recieved
+        # by the eventhandler and before the sound has started playing
+        elif pygame.mixer.music.get_busy() == False:
+            self.resumeBackgroundMusic()
+        
+        self.tileSound = None
+
+    def startSoundAnimation(self):
+        global animateSideTile1Sound
+        global animateSideTile2Sound
+
+        if sideTile2.clickedTile != None:
+            if sideTile2.clickedTile.sound == music.tileSound:
+                animateSideTile1Sound = False
+                animateSideTile2Sound = True
+
+        if sideTile1.clickedTile.sound == music.tileSound:
+            animateSideTile1Sound = True
 
 class tileData:
     def __init__(self):
@@ -37,23 +132,25 @@ class boardClass:
 class animationClass:
     def __init__(self, id):
         self.id = id
-        self.object = None
+        self.clickedTile = None
+        self.rect = None
         self.counter = 0
         self.animation2Run = None
         self.runAnimation = False
         self.status = None
 
-    def startAnimation(self, startAnimation, object = None):
-        if object != None:
-            self.object = object
+    def startAnimation(self, startAnimation, tile = None, rect = None):
+        if (tile != None) & (rect != None):
+            self.clickedTile = tile
+            self.rect = rect
         
-        # if an object is assigned to the animation tile
-        if self.object != None:
+        # if a clickedTile is assigned to the animation tile
+        if self.clickedTile != None:
             if startAnimation == "disappear":
                 self.animation2Run = disappearAnimation
                 
-                if (self.id == "tile1") or (self.id == "tile2"):
-                    self.object.clickedTile.visible = False
+                if self.id == "tile":
+                    self.clickedTile.visible = False
                 
                 self.status = "started disappear"
 
@@ -70,7 +167,8 @@ class animationClass:
 
     def animateTile(self, rect):
         scaledRect = rect.scale_by(self.animation2Run[self.counter])
-        pygame.draw.rect(screen, blue, scaledRect, 0, 0, tile.radius)
+        scaledImage = pygame.transform.scale(tileTexture, scaledRect.size)
+        screen.blit(scaledImage, scaledRect)
         self.counter += 1
         self.animationStatus()
 
@@ -79,7 +177,7 @@ class animationClass:
         global displaySideTile2
 
         scaledRect = rect.scale_by(self.animation2Run[self.counter])
-        scaledImage = pygame.transform.scale(self.object.clickedTile.image, scaledRect.size)
+        scaledImage = pygame.transform.scale(self.clickedTile.image, scaledRect.size)
         screen.blit(scaledImage, scaledRect)
         self.counter += 1
         self.animationStatus()
@@ -87,20 +185,20 @@ class animationClass:
     def animationStatus(self):
         # checks if the animation is finished
         if self.counter > len(self.animation2Run) - 1:
-            if (self.id == "tile1") or (self.id == "tile2"):  
+            if self.id == "tile":  
                 if self.status == "started disappear": 
                     self.status = "finished disappear"
                     
                 else:
                     self.status = "finished appear"
-                    self.object.clickedTile.visible = True
-                    self.clearData()
+                    self.clickedTile.visible = True
+                    self.clearAnimationData()
             
-            # if the object is a side tile
+            # if self is a side tile
             else:
                 if self.status == "started disappear":
                     self.status = "finished disappear"
-                    self.clearData()
+                    self.clearAnimationData()
 
                 elif self.status == "started appear":
                     self.status = "finished appear"
@@ -112,41 +210,76 @@ class animationClass:
             self.counter = 0
             self.runAnimation = False
     
-    def clearData(self):
-        self.object = None
+    def clearAnimationData(self):
+        global animateSideTile1Sound
+        global animateSideTile2Sound
+
+        self.clickedTile = None
+        self.rect = None
         self.animation2Run = None
 
-# colors
-white = (255, 255, 255)
-black = (0, 0, 0)
-red = (255, 0, 0)
-green = (0, 255, 0)
-blue = (0, 0, 255)
+        animateSideTile1Sound = False
+        animateSideTile2Sound = False
 
-# adjustable parameters
-#totalTiles = 22
+pygame.init()
+
+# event handler IDs
+RESUME_BACKGROUND_SONG = pygame.USEREVENT+1
+RESTART_BACKGROUND_SONG = pygame.USEREVENT+2
+START_TILE_SONG = pygame.USEREVENT+3
+MUSIC_CHANNEL_STOPPED = pygame.USEREVENT+4
+
+# colors
+black = (0, 0, 0)
+blackTransparent = (0, 0, 0, 100)
+redTransparent = (255, 0, 0, 50)
+greenTransparent = (0, 255, 0, 50)
+orange = (211, 119, 40)
+
+# directories and files
 rootDir = "current_game"
 imagesFolder = "images"
-songsFolder = "songs"
+soundsFolder = "sounds"
+speakerAnimationFolder = "assets/notes_animation_rounded/"
+tileTexturePath = "assets/tile_texture.png"
+backgroundPath = "assets/background.jpg"
 
+# adjustable parameters
 minRatio = 3/2
 boardScaleFactor = 0.9
 tileScaleFactor = 0.9
-radiusScaleFactor = 1000
-outlineScaleFactor = 40
+radiusScaleFactor = 11
+outlineScaleFactor = 20
 sideBarScaleFactor = 1/3
-sideTileScaleFactor = 0.65
-animationTime = 1 # in seconds
+sideTileScaleFactor = 0.7
+
+# animation parameters
 fps = 60
+animationTime = 1 #in seconds
+speakerAnimationSpeed = 0.4
+
+# music parameters
+fadeIn = animationTime*800 # in milliseconds
+fadeOut = fadeIn
+backgroundMusicVolume = 0.08
+soundVolume = 0.3
+soundEffectVolume = 0.4
+backgroundMusic = "assets/background_music.mp3"
+correctSound = pygame.mixer.Sound("assets/correct.mp3")
+wrongSound = pygame.mixer.Sound("assets/wrong.mp3")
+correctSound.set_volume(soundEffectVolume)
+wrongSound.set_volume(soundEffectVolume)
 
 # screen, side bar and game variables
 displayInfo = pygame.display.Info()
-#screenHeight = displayInfo.current_h
-#screenWidth = displayInfo.current_w
-screenScaleFactor = 80
-screenHeight = 9*screenScaleFactor
-screenWidth = 16*screenScaleFactor
+screenHeight = displayInfo.current_h
+screenWidth = displayInfo.current_w
+#screenScaleFactor = 80
+#screenHeight = 9*screenScaleFactor
+#screenWidth = 16*screenScaleFactor
 screen = pygame.display.set_mode([screenWidth, screenHeight])
+screenSurfaceBack = pygame.Surface((screenWidth, screenHeight), pygame.SRCALPHA)
+screenSurfaceFront = pygame.Surface((screenWidth, screenHeight), pygame.SRCALPHA)
 
 sideBar = pygame.Rect([0, 0, screenWidth*sideBarScaleFactor, screenHeight])
 
@@ -155,7 +288,6 @@ run = True
 
 # functions
 def calculateTotalTiles():
-    global run
     path = []
 
     for relPath, dirs, files in os.walk(rootDir):
@@ -163,24 +295,20 @@ def calculateTotalTiles():
             imagesPath = os.path.join(relPath, imagesFolder)
             images = os.listdir(imagesPath)
 
-        if songsFolder in dirs:
-            songsPath = os.path.join(relPath, songsFolder)
-            songs = os.listdir(songsPath)
+        if soundsFolder in dirs:
+            soundsPath = os.path.join(relPath, soundsFolder)
+            sounds = os.listdir(soundsPath)
 
     for image in images:
         temp = os.path.join(imagesPath, image)
         path.append(r"%s" % temp)
 
-    for song in songs:
-        temp = os.path.join(songsPath, song)
+    for sound in sounds:
+        temp = os.path.join(soundsPath, sound)
         path.append(r"%s" % temp)
     
-    if len(images) == len(songs):
-        tiles = len(images) + len(songs)
-        return(tiles, path)
-
-    else:
-        run = False
+    tiles = len(images) + len(sounds)
+    return(tiles, path)
 
 def calculateRowsColumns(product):
     if(product == 8):
@@ -200,7 +328,8 @@ def calculateRowsColumns(product):
     return(int(rows), int(columns))
 
 def calculateSideTiles():
-    sideTileList = [sideTileClass(), sideTileClass()]
+    sideTile1 = sideTileClass()
+    sideTile2 = sideTileClass()
 
     size = sideBar.width*sideTileScaleFactor
     posX1 = (sideBar.width - size)/2
@@ -208,19 +337,19 @@ def calculateSideTiles():
     posX2 = posX1
     posY2 = size + 2*(sideBar.height - 2*size)/3
 
-    sideTileList[0].rect = pygame.Rect([posX1, posY1, size, size])
-    sideTileList[1].rect = pygame.Rect([posX2, posY2, size, size])
+    sideTile1.rect = pygame.Rect([posX1, posY1, size, size])
+    sideTile2.rect = pygame.Rect([posX2, posY2, size, size])
 
-    sideTileList[0].radius = round(sideTileList[0].rect.width/radiusScaleFactor)
-    sideTileList[1].radius = round(sideTileList[1].rect.width/radiusScaleFactor)  
+    sideTile1.radius = round(sideTile1.rect.width/radiusScaleFactor)
+    sideTile2.radius = round(sideTile2.rect.width/radiusScaleFactor)  
 
-    return(sideTileList)    
+    return(sideTile1, sideTile2)    
 
 def calculateBoard():
     board = boardClass()
     tile = tileData()
 
-    maxBoardHeight = screenHeight - 2*sideTileList[0].rect.y
+    maxBoardHeight = screenHeight - 2*sideTile1.rect.y
 
     board.width = (screenWidth - sideBar.width)*boardScaleFactor
     tile.size = board.width*tileScaleFactor/columns
@@ -243,11 +372,17 @@ def calculateBoard():
 
     return(tile, board)
 
-def drawElements():
-    pygame.draw.rect(screen, black, sideBar)
-    pygame.draw.rect(screen, white, sideTileList[0].rect, 0, sideTileList[0].radius)
-    pygame.draw.rect(screen, white, sideTileList[1].rect, 0, sideTileList[1].radius)
-    #boardObject = pygame.draw.rect(screen, black, [board.x, board.y, board.width, board.height])
+def drawBackgroundElements():
+    screen.blit(background, backgroundPosition)
+    screen.blit(screenSurfaceBack, (0, 0))
+    pygame.draw.rect(screenSurfaceBack, blackTransparent, sideTile1.rect, 0, sideTile1.radius)
+    pygame.draw.rect(screenSurfaceBack, blackTransparent, sideTile2.rect, 0, sideTile2.radius)
+
+def loadTileTexture():
+    tileTexture = pygame.image.load(tileTexturePath)
+    scaledTileTexture = pygame.transform.scale(tileTexture, tileMatrix[0][0].rect.size)
+
+    return scaledTileTexture
 
 def drawTiles():
     counter = 0
@@ -257,8 +392,11 @@ def drawTiles():
         for j in range(columns):
             counter += 1
 
-            if(tileMatrix[i][j].visible == True):
-                pygame.draw.rect(screen, blue, tileMatrix[i][j].rect, 0, tile.radius)
+            if tileMatrix[i][j].visible == False:
+                pygame.draw.rect(screenSurfaceBack, blackTransparent, tileMatrix[i][j].rect, 0, tile.radius)
+
+            if tileMatrix[i][j].visible == True:
+                screen.blit(tileTexture, tileMatrix[i][j].rect)
             
             if counter >= totalTiles:
                 stopLoop = True
@@ -271,14 +409,14 @@ def outlineTiles():
     counter = 0
     stopLoop = False
 
-    if numClickedTiles < 2:
+    if (sideTile1.clickedTile == None) or (sideTile2.clickedTile == None):
         for i in range(rows):
             for j in range(columns):
                 counter += 1
 
                 if(tileMatrix[i][j].visible == True):
                     if(tileMatrix[i][j].rect.collidepoint(pygame.mouse.get_pos())):
-                        pygame.draw.rect(screen, green, tileMatrix[i][j].rect, tile.outline, tile.radius)
+                        pygame.draw.rect(screen, orange, tileMatrix[i][j].rect, tile.outline, tile.radius)
             
                 if counter >= totalTiles:
                     stopLoop = True
@@ -324,15 +462,13 @@ def assignFiles2Tiles(paths):
 
             if imagesFolder in file:
                 image = pygame.image.load(file)
-                scaledImage = pygame.transform.scale(image, sideTileList[0].rect.size)
+                scaledImage = pygame.transform.scale(image, sideTile1.rect.size)
                 tileMatrix[i][j].image = scaledImage
                 tileMatrix[i][j].pairId = id
             
+            # if the chosen element was a sound
             else:
-                song = pygame.image.load(file)
-                scaledSong = pygame.transform.scale(song, sideTileList[0].rect.size)
-                # ÄNDRA HÄR
-                tileMatrix[i][j].image = scaledSong
+                tileMatrix[i][j].sound = file
                 tileMatrix[i][j].pairId = id
             
             if counter >= totalTiles:
@@ -344,12 +480,11 @@ def assignFiles2Tiles(paths):
 
 def mouseClick(event, state):
     global clickedRow, clickedColumn
-    global numClickedTiles
    
     counter = 0
     stopLoop = False
     
-    if numClickedTiles < 2:
+    if (sideTile1.clickedTile == None) or (sideTile2.clickedTile == None):
         if state == "down":
             for i in range(rows):
                 for j in range(columns):
@@ -383,15 +518,35 @@ def mouseClick(event, state):
 
                     if (tileMatrix[i][j].rect.collidepoint(event.pos)) & (tileMatrix[i][j].visible == True):
                         if (clickedRow == i) & (clickedColumn == j):
-                            numClickedTiles += 1
-                            # assign file to side tile
-                            sideTileList[numClickedTiles - 1].clickedTile = tileMatrix[i][j]
 
-                            if numClickedTiles == 1:
-                                tile1.startAnimation("disappear", sideTileList[0])
-                            
-                            elif numClickedTiles == 2:
-                                tile2.startAnimation("disappear", sideTileList[1])
+                            if sideTile1.clickedTile == None:
+                                sideTile1.clickedTile = tileMatrix[i][j]
+
+                                if sideTile1.clickedTile.sound != None:
+                                    music.tileSound = sideTile1.clickedTile.sound
+                                    music.queueTileSound()
+
+                                if tile1Animation.runAnimation == False:
+                                    tile1Animation.startAnimation("disappear", sideTile1.clickedTile, sideTile1.clickedTile.rect)
+                                
+                                # tile1Animation is busy and is currently running another animation
+                                else:
+                                    tile1AnimationExtra.startAnimation("disappear", sideTile1.clickedTile, sideTile1.clickedTile.rect)
+
+                            # sideTile1.clickedTile is assigned a tile but sideTile2.clickedTile is not
+                            else:
+                                sideTile2.clickedTile = tileMatrix[i][j]
+
+                                if sideTile2.clickedTile.sound != None:
+                                    music.tileSound = sideTile2.clickedTile.sound
+                                    music.queueTileSound()
+
+                                if tile2Animation.runAnimation == False:
+                                    tile2Animation.startAnimation("disappear", sideTile2.clickedTile, sideTile2.clickedTile.rect)
+                                
+                                # tile2Animation is busy and is currently running another animation
+                                else:
+                                    tile2AnimationExtra.startAnimation("disappear", sideTile2.clickedTile, sideTile2.clickedTile.rect)                                
                         
                         stopLoop = True
                         break
@@ -402,53 +557,115 @@ def mouseClick(event, state):
                     break
 
 def displaySideTileFiles():
-    if sideTile1.status == "finished appear":
-        screen.blit(sideTileList[0].clickedTile.image, sideTileList[0].rect)
+    if sideTile1Animation.status == "finished appear":
+        screen.blit(sideTile1.clickedTile.image, sideTile1.rect)
     
-    if sideTile2.status == "finished appear":
-        screen.blit(sideTileList[1].clickedTile.image, sideTileList[1].rect)
+    if sideTile2Animation.status == "finished appear":
+        screen.blit(sideTile2.clickedTile.image, sideTile2.rect)
 
 def animationHandler():
-    global numClickedTiles
-    global tilesMatch
+    if (animateSideTile1Sound == True) & (sideTile1.clickedTile != None):
+        sideTile1.clickedTile.nextSoundAnimationImage()
+
+    if (animateSideTile2Sound == True) & (sideTile2.clickedTile != None):
+        sideTile2.clickedTile.nextSoundAnimationImage()
     
-    if tile1.runAnimation == True:
-        tile1.animateTile(tile1.object.clickedTile.rect)
+    if tile1Animation.runAnimation == True:
+        tile1Animation.animateTile(tile1Animation.rect)
 
-        if tile1.status == "finished disappear":
-            sideTile1.startAnimation("appear", sideTileList[0])
+        if tile1Animation.status == "finished disappear":
+            # loads the first speaker animation image so we dont get errors
+            sideTile1.clickedTile.nextSoundAnimationImage()
+            sideTile1Animation.startAnimation("appear", sideTile1.clickedTile, sideTile1.rect)
 
-        elif tile1.status == "finished appear":
-            sideTile2.startAnimation("disappear", sideTileList[1])
+        elif tile1Animation.status == "finished appear":
+            sideTile2Animation.startAnimation("disappear", sideTile2.clickedTile, sideTile2.rect)
 
-    if tile2.runAnimation == True:
-        tile2.animateTile(tile2.object.clickedTile.rect)
+    if tile2Animation.runAnimation == True:
+        tile2Animation.animateTile(tile2Animation.rect)
 
-        if tile2.status == "finished disappear":
-            # added do fix potential softlock
-            if (tilesMatch == True) & (tile2.status == "finished disappear"):
-                resetAfterMatch()
-            
-            else:
-                sideTile2.startAnimation("appear", sideTileList[1])
+        if tile2Animation.status == "finished disappear":
+            sideTile2.clickedTile.nextSoundAnimationImage()
+            sideTile2Animation.startAnimation("appear", sideTile2.clickedTile, sideTile2.rect)
+    
+    # this is only used when tile1Animation is busy and a new tile is clicked
+    if tile1AnimationExtra.runAnimation == True:
+        tile1AnimationExtra.animateTile(tile1AnimationExtra.rect)
 
-        elif tile2.status == "finished appear":
-            numClickedTiles = 0
+        if tile1AnimationExtra.status == "finished disappear":
+            # loads the first speaker animation image so we dont get errors
+            sideTile1.clickedTile.nextSoundAnimationImage()
+            sideTile1Animation.startAnimation("appear", sideTile1.clickedTile, sideTile1.rect)
+            transferAnimationDataTo(tile1Animation)
+    
+    # this is only used when tile2Animation is busy and a new tile is clicked
+    if tile2AnimationExtra.runAnimation == True:
+        tile2AnimationExtra.animateTile(tile2AnimationExtra.rect)
 
-    if sideTile1.runAnimation == True:
-        sideTile1.animateSideTile(sideTile1.object.rect)
+        if tile2AnimationExtra.status == "finished disappear":
+            # loads the first speaker animation image so we dont get errors
+            sideTile2.clickedTile.nextSoundAnimationImage()
+            sideTile2Animation.startAnimation("appear", sideTile2.clickedTile, sideTile2.rect)
+            transferAnimationDataTo(tile2Animation)
 
-        if sideTile1.status == "finished disappear":
-            tile1.startAnimation("appear", sideTileList[0])
+    if sideTile1Animation.runAnimation == True:
+        sideTile1Animation.animateSideTile(sideTile1.rect)
 
-    if sideTile2.runAnimation == True:
-        sideTile2.animateSideTile(sideTile2.object.rect)
+        if sideTile1Animation.status == "finished disappear":
+            tile1Animation.startAnimation("appear")
+            resetSideTile(sideTile1)
+        
+        elif sideTile1Animation.status == "finished appear":
+            music.soundHandler(sideTile1)
 
-        if sideTile2.status == "finished disappear":
-            tile2.startAnimation("appear", sideTileList[1])
+        elif sideTile1Animation.status == "finished match":
+            resetSideTile(sideTile1)
+
+    if sideTile2Animation.runAnimation == True:
+        sideTile2Animation.animateSideTile(sideTile2.rect)
+
+        if sideTile2Animation.status == "finished disappear":
+            tile2Animation.startAnimation("appear")
+            resetSideTile(sideTile2)
+        
+        elif sideTile2Animation.status == "finished appear":
+            music.soundHandler(sideTile2)
+        
+        elif sideTile2Animation.status == "finished match":
+            resetSideTile(sideTile2)
+
+def transferAnimationDataTo(transferTo):
+    global tile1Animation
+    global tile2Animation
+    global tile1AnimationExtra
+    global tile2AnimationExtra
+
+    if transferTo == tile1Animation:
+        del tile1Animation
+        tile1Animation = tile1AnimationExtra
+        tile1AnimationExtra = animationClass("tile")
+    
+    # transfer to is equal to tile2animation
+    else:
+        del tile2Animation
+        tile2Animation = tile2AnimationExtra
+        tile2AnimationExtra = animationClass("tile")
+
+def resetSideTile(sideTile):
+    global tilesMatch
+    global enableColors
+    global enterPressed
+
+    sideTile.clickedTile.speakerAnimationCounter = 0
+    sideTile.clickedTile = None
+
+    if sideTile == sideTile2:
+        tilesMatch = False
+        enableColors = False
+        enterPressed = False
 
 def createAnimations():
-    dX = 1/fps
+    dX = 1/(animationTime*fps)
     a = -8
     x = -0.112
     c = 1.1
@@ -470,70 +687,115 @@ def createAnimations():
 
     return disappear, appear
 
+def loadSoundAnimation():
+    imageList = []
+    files = os.listdir(speakerAnimationFolder)
+
+    for fileName in files:
+        imageList.append(speakerAnimationFolder + fileName)
+        
+    return imageList
+
 def checkIfMatch():
     global tilesMatch
     global tilesLeftOnBoard
+    global enableColors
 
-    if sideTileList[0].clickedTile.pairId == sideTileList[1].clickedTile.pairId:
+    enableColors = True
+
+    if sideTile1.clickedTile.pairId == sideTile2.clickedTile.pairId:
         tilesMatch = True
+        correctSound.play()
         tilesLeftOnBoard -= 2
 
-        sideTile1.startAnimation("match")
-        sideTile2.startAnimation("match")
-
-        # added to fix bug
-        if tile2.status == "finished disappear":
-            resetAfterMatch()
+        sideTile1Animation.startAnimation("match")
+        sideTile2Animation.startAnimation("match")
 
         if tilesLeftOnBoard == 0:
             print("DU VANN!!!")
     
     # the tiles didn't match
     else:
-        sideTile1.startAnimation("disappear")  
+        sideTile1Animation.startAnimation("disappear")
+        wrongSound.play()
 
-def resetAfterMatch():
-    global numClickedTiles
-    global tilesMatch
+def displayColors():
+    if enableColors == True:
+        if tilesMatch == True:
+            pygame.draw.rect(screenSurfaceFront, greenTransparent, sideBar)
 
-    tile1.clearData()
-    tile2.clearData()
+        else:
+            pygame.draw.rect(screenSurfaceFront, redTransparent, sideBar)
+        
+        screen.blit(screenSurfaceFront, (0, 0))
 
-    tilesMatch = False
-    numClickedTiles = 0
+def scaleBackground():
+    background = pygame.image.load(backgroundPath)
+    backgroundWidth, backgroundHeight = background.get_size()
+
+    # assume scaling the height will work
+    scaleFactor = backgroundHeight/screenHeight
+
+    scaledWidth = math.ceil(backgroundWidth*scaleFactor)
+    scaledHeight = math.ceil(backgroundHeight*scaleFactor)
+
+    # check if it worked. If it didn't, use width as dimensioning factor
+    if (scaledWidth < screenWidth) or (scaledHeight < screenHeight):
+        scaleFactor = screenWidth/backgroundWidth
+
+        scaledWidth = math.ceil(backgroundWidth*scaleFactor)
+        scaledHeight = math.ceil(backgroundHeight*scaleFactor)
+
+    scaledBackground = pygame.transform.scale(background, (scaledWidth, scaledHeight))
+
+    x = (screenWidth - scaledWidth)/2
+    y = (screenHeight - scaledHeight)/2
+
+    return scaledBackground, (x, y)
+    
 
 # global variables
 totalTiles, path2Files = calculateTotalTiles()
-# run is set to false if the amount of songs and images are not equal
-if(run == True):
-    numClickedTiles = 0
-    numEnterClicks = 0
-    tilesMatch = False
-    tilesLeftOnBoard = totalTiles
+enterPressed = False
+tilesMatch = False
+enableColors = False
+tilesLeftOnBoard = totalTiles
 
-    rows, columns = calculateRowsColumns(totalTiles)
-    sideTileList = calculateSideTiles()   
-    tile, board = calculateBoard()
-    tileMatrix = generateTileMatrix()
-    assignFiles2Tiles(path2Files)
-    
-    tile1 = animationClass("tile1")
-    tile2 = animationClass("tile2")
-    sideTile1 = animationClass("sideTile1")
-    sideTile2 = animationClass("sideTile2")
-    disappearAnimation, appearAnimation = createAnimations()
+rows, columns = calculateRowsColumns(totalTiles)
+sideTile1, sideTile2 = calculateSideTiles()
 
-    displaySideTile1 = False
-    displaySideTile2 = False
+tile, board = calculateBoard()
+tileMatrix = generateTileMatrix()
+assignFiles2Tiles(path2Files)
+tileTexture = loadTileTexture()
+background, backgroundPosition = scaleBackground()
+
+music = musicClass(backgroundMusic, fadeIn, fadeOut)
+
+tile1Animation = animationClass("tile")
+tile2Animation = animationClass("tile")
+tile1AnimationExtra = animationClass("tile")
+tile2AnimationExtra = animationClass("tile")
+sideTile1Animation = animationClass("sideTile")
+sideTile2Animation = animationClass("sideTile")
+disappearAnimation, appearAnimation = createAnimations()
+
+animateSideTile1Sound = False
+animateSideTile2Sound = False
+speakerAnimation = loadSoundAnimation()
+
+displaySideTile1 = False
+displaySideTile2 = False
 
 while run:
     timer.tick(fps)
-    screen.fill(white)
-    drawElements()
+    screen.fill(black)
+    drawBackgroundElements()
     drawTiles()
     outlineTiles()
     displaySideTileFiles()
     animationHandler()
+    displayColors()
 
     # event handler
     for event in pygame.event.get():
@@ -547,9 +809,12 @@ while run:
             if event.key == pygame.K_q:
                 run = False
 
-            if event.key == pygame.K_RETURN:                
-                if numClickedTiles >= 2:
-                    checkIfMatch()                 
+            if event.key == pygame.K_RETURN:
+                if (sideTile1.clickedTile != None) & (sideTile2.clickedTile != None):
+                    if enterPressed == False:
+                        enterPressed = True
+                        checkIfMatch()
+                        music.reset()
 
         # checks for mouse down
         if event.type == pygame.MOUSEBUTTONDOWN:
@@ -560,6 +825,17 @@ while run:
         elif event.type == pygame.MOUSEBUTTONUP:
             if event.button == 1:
                 mouseClick(event, "up")
+
+        # checks for music end events
+        elif event.type == RESUME_BACKGROUND_SONG:
+            music.resumeBackgroundMusic()
+
+        elif event.type == RESTART_BACKGROUND_SONG:   
+            music.restartBackgroundMusic()
+
+        elif event.type == MUSIC_CHANNEL_STOPPED:
+            if music.tileSound == None:
+                music.resumeBackgroundMusic()
 
     pygame.display.flip()
 pygame.quit()
