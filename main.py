@@ -3,6 +3,10 @@ import os
 import random
 import math
 
+import os
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+
 class tile4Matrix:
     def __init__(self):
         self.visible = True
